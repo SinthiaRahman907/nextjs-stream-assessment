@@ -24,3 +24,26 @@ Open `http://localhost:3000` in your browser.
 ## Constraints
 - **No external state or data-fetching libraries:** Do not install Zustand, Redux, Jotai, TanStack Query, or SWR. Solve state and cancellation using native React and Next.js App Router primitives.
 - Complete `DECISIONS.md` before submitting.
+
+---
+
+## Solution Overview
+See [`DECISIONS.md`](DECISIONS.md) for the root-cause analysis and design rationale.
+
+| Concern | Where | Approach |
+|---|---|---|
+| Initial data + shell | `src/app/page.tsx` (Server Component) | Reads `searchParams`, filters on the server, renders layout; no client fetch on mount |
+| URL-driven filters | `src/components/FilterBar.tsx` | URL is the source of truth; debounced `router.push`; URL→draft reconciled during render (no effect loop); Back/Forward work |
+| Stream cancellation | `src/lib/summaryStream.ts` | `AbortController` + monotonically increasing request id; stale chunks dropped; `AbortError` swallowed |
+| Render isolation | `WorkspaceProvider.tsx`, `SummaryDrawer.tsx` | Tokens live in an external store read via `useSyncExternalStore`; only the summary leaf subscribes; memoized formatter and rows |
+| Server stream hygiene | `src/app/api/stream-summary/route.ts` | `cancel()` + abort listener stop the producer immediately |
+
+Each panel shows a live **render counter**, so render isolation is visible while a summary streams.
+
+### Verification
+```bash
+npm run build && npm start                      # terminal 1
+npm i --no-save playwright && npx playwright install chromium
+node scripts/verify-e2e.mjs                     # terminal 2: 23 end-to-end checks
+```
+Next.js was bumped from 15.0.3 to 15.0.8 (CVE-2025-66478 fix, same minor line).

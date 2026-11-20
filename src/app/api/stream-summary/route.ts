@@ -1,6 +1,8 @@
 import { NextRequest } from "next/server";
 import { ALL_EVENTS } from "@/lib/mockData";
 
+export const dynamic = "force-dynamic";
+
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const eventId = searchParams.get("eventId") || "evt_0001";
@@ -20,20 +22,45 @@ export async function GET(request: NextRequest) {
   const tokens = report.split(" ");
   const encoder = new TextEncoder();
 
-  const stream = new ReadableStream({
-    async start(controller) {
-      // Initial model cold-start delay
-      await new Promise((r) => setTimeout(r, 250));
+  // Stop producing as soon as the client goes away. The original loop only
+  // polled request.signal between tokens and had no cancel() hook, so after a
+  // client abort it kept a timer running and could call enqueue() on a
+  // cancelled stream ("Invalid state: Controller is already closed").
+  let cancelled = false;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let wake: (() => void) | undefined;
+  const stop = () => {
+    cancelled = true;
+    if (timer) clearTimeout(timer);
+    wake?.();
+  };
+  request.signal.addEventListener("abort", stop, { once: true });
 
-      for (const word of tokens) {
-        if (request.signal.aborted) {
-          controller.close();
-          return;
+  const sleep = (ms: number) =>
+    new Promise<void>((resolve) => {
+      wake = resolve;
+      timer = setTimeout(resolve, ms);
+    });
+
+  const stream = new ReadableStream<Uint8Array>({
+    async start(controller) {
+      try {
+        // Initial model cold-start delay
+        await sleep(250);
+        for (const word of tokens) {
+          if (cancelled) return;
+          controller.enqueue(encoder.encode(word + " "));
+          await sleep(45);
         }
-        controller.enqueue(encoder.encode(word + " "));
-        await new Promise((r) => setTimeout(r, 45));
+        if (!cancelled) controller.close();
+      } catch {
+        // Stream was torn down underneath us; nothing left to do.
+      } finally {
+        request.signal.removeEventListener("abort", stop);
       }
-      controller.close();
+    },
+    cancel() {
+      stop();
     },
   });
 

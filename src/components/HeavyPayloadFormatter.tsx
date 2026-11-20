@@ -1,12 +1,25 @@
 "use client";
 
-import React from "react";
+import React, { memo } from "react";
 
 /**
  * Simulates an expensive markdown / syntax highlighting component.
- * Intentionally un-memoized in starter code so parent re-renders cause noticeable lag.
+ *
+ * Changes from the starter:
+ *  - Wrapped in React.memo, so it only re-renders when `rawPayload` (or the
+ *    `children` element identity) changes.
+ *  - The streaming summary is no longer a `summaryText` string prop (which
+ *    forced this ~12 ms render on every token). Instead the summary *leaf* is
+ *    passed in as `children`. React re-renders that child on its own when its
+ *    store subscription fires, without re-running this component.
  */
-export function HeavyPayloadFormatter({ rawPayload, summaryText }: { rawPayload: string; summaryText: string }) {
+export const HeavyPayloadFormatter = memo(function HeavyPayloadFormatter({
+  rawPayload,
+  children,
+}: {
+  rawPayload: string;
+  children: React.ReactNode;
+}) {
   // Simulate ~12ms of synchronous formatting work per render
   const start = performance.now();
   let checksum = 0;
@@ -15,7 +28,10 @@ export function HeavyPayloadFormatter({ rawPayload, summaryText }: { rawPayload:
   }
 
   return (
-    <div data-checksum={checksum} style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+    // data-checksum depends on wall-clock timing (it only exists so the busy
+    // loop isn't optimized away), so server and client values always differ.
+    // suppressHydrationWarning scopes the exception to this one attribute.
+    <div data-checksum={checksum} suppressHydrationWarning style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
       <div
         style={{
           background: "#1e293b",
@@ -27,7 +43,7 @@ export function HeavyPayloadFormatter({ rawPayload, summaryText }: { rawPayload:
           minHeight: "180px",
         }}
       >
-        {summaryText || "Select an event to generate an AI incident analysis..."}
+        {children}
       </div>
       <details open>
         <summary style={{ cursor: "pointer", color: "#94a3b8", fontSize: "13px" }}>Raw Telemetry Payload</summary>
@@ -45,4 +61,4 @@ export function HeavyPayloadFormatter({ rawPayload, summaryText }: { rawPayload:
       </details>
     </div>
   );
-}
+});
