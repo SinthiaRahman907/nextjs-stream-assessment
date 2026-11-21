@@ -42,8 +42,10 @@ Each panel shows a live **render counter**, so render isolation is visible while
 
 ### Verification
 ```bash
+npm run lint                                    # ESLint: no warnings or errors
 npm run build && npm start                      # terminal 1
 npm i --no-save playwright && npx playwright install chromium
 node scripts/verify-e2e.mjs                     # terminal 2: 23 end-to-end checks
+                                                # (set CHROME_PATH to use an installed Chrome instead)
 ```
 Next.js was bumped from 15.0.3 to 15.0.8 (CVE-2025-66478 fix, same minor line).
